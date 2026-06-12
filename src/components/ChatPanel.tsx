@@ -12,17 +12,21 @@ interface Props {
   onRedo: () => void;
   onSeek: (t: number) => void;
   onOpenExport: (preset?: string) => void;
+  onSelect: (ids: string[]) => void;
+  onThumbnail: (count: number) => void;
 }
 
 const SUGGESTIONS = [
   "Add subtitles",
   "Remove all dead space",
   "Remove all filler words",
-  "Create TikTok-style captions",
-  "Add dramatic zooms",
-  "Make colors more vibrant",
+  "Hormozi style captions",
+  "Trim first 3 seconds",
+  "Fade out the ending",
+  "Add a call to action",
+  "Speed up 2x",
   "Generate 5 shorts",
-  "Create a TikTok version",
+  "Generate thumbnail",
 ];
 
 declare global {
@@ -88,6 +92,8 @@ export default function ChatPanel(p: Props) {
         if (result.effect?.type === "redo") p.onRedo();
         if (result.effect?.type === "seek") p.onSeek(result.effect.time);
         if (result.effect?.type === "openExport") p.onOpenExport(result.effect.preset);
+        if (result.effect?.type === "select") p.onSelect(result.effect.ids);
+        if (result.effect?.type === "thumbnail") p.onThumbnail(result.effect.count);
         return [
           ...prev,
           { id: uid("msg"), role: "assistant" as const, text: result.reply, pending: result.pending ?? null },

@@ -225,6 +225,93 @@ export function opUpdateClip(p: ProjectState, clipId: string, patch: Partial<Cli
   };
 }
 
+// The "main sequence": media clips on the video track that holds the most of
+// them, in timeline order. Chat references like "clip 3" resolve against this.
+export function mainSequence(p: ProjectState): Clip[] {
+  let best: Clip[] = [];
+  for (const t of p.tracks) {
+    if (t.kind !== "video") continue;
+    const cs = clipsOnTrack(p, t.id).filter((c) => c.kind === "media");
+    if (cs.length > best.length) best = cs;
+  }
+  return best;
+}
+
+// Re-lay a track's media clips back-to-back in the given order, starting at
+// the position of the earliest clip (ripple reorder, gaps removed).
+export function opResequence(p: ProjectState, ordered: Clip[]): ProjectState {
+  if (!ordered.length) return p;
+  let cursor = Math.min(...ordered.map((c) => c.start));
+  const newStarts = new Map<string, number>();
+  for (const c of ordered) {
+    newStarts.set(c.id, cursor);
+    cursor += c.duration;
+  }
+  return {
+    ...p,
+    clips: p.clips.map((c) =>
+      newStarts.has(c.id) ? { ...c, start: newStarts.get(c.id)! } : c
+    ),
+  };
+}
+
+// Change playback speed, keeping the same source range (timeline length scales).
+export function opSetSpeed(p: ProjectState, clipId: string, speed: number): ProjectState {
+  const clip = p.clips.find((c) => c.id === clipId);
+  if (!clip || speed <= 0) return p;
+  const sourceLen = clip.duration * clip.speed;
+  return opUpdateClip(p, clipId, { speed, duration: sourceLen / speed });
+}
+
+export function opAddTitleClip(
+  p: ProjectState,
+  opts: { text: string; start: number; duration: number; corner: Clip["corner"]; animation?: Clip["textAnimation"] }
+): ProjectState {
+  const track = p.tracks.find((t) => t.kind === "graphics");
+  if (!track) return p;
+  const clip: Clip = {
+    id: uid("clip"), trackId: track.id, assetId: null, name: `Title: ${opts.text}`,
+    start: opts.start, duration: opts.duration, inPoint: 0, color: "#b8862d",
+    kind: "title", speed: 1, volume: 1, text: opts.text, corner: opts.corner,
+    textAnimation: opts.animation ?? "none",
+  };
+  return { ...p, clips: [...p.clips, clip] };
+}
+
+export function opAddOverlayClip(
+  p: ProjectState,
+  opts: {
+    assetId: string; name: string; start: number; duration: number;
+    corner: Clip["corner"]; sizePct?: number; opacity?: number;
+  }
+): ProjectState {
+  const track = p.tracks.find((t) => t.kind === "graphics");
+  if (!track) return p;
+  const clip: Clip = {
+    id: uid("clip"), trackId: track.id, assetId: opts.assetId, name: opts.name,
+    start: opts.start, duration: opts.duration, inPoint: 0, color: "#6d8a3a",
+    kind: "overlay", speed: 1, volume: 0, corner: opts.corner,
+    sizePct: opts.sizePct, opacity: opts.opacity,
+  };
+  return { ...p, clips: [...p.clips, clip] };
+}
+
+// Full-frame insert (e.g. "insert screenshot at 2:10") on the topmost video track.
+export function opInsertOnTopTrack(
+  p: ProjectState,
+  asset: MediaAsset,
+  start: number,
+  duration: number
+): ProjectState {
+  const track = p.tracks.find((t) => t.kind === "video" && !t.locked);
+  if (!track) return p;
+  const clip: Clip = {
+    id: uid("clip"), trackId: track.id, assetId: asset.id, name: asset.name,
+    start, duration, inPoint: 0, color: "#3b6ea5", kind: "media", speed: 1, volume: 1,
+  };
+  return { ...p, clips: [...p.clips, clip] };
+}
+
 // ---------- hook ----------
 
 export function useProject() {

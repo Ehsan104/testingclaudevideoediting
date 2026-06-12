@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Clip, MediaAsset, ProjectState } from "../types";
 import { PreviewToggles } from "../App";
 import { formatTime } from "../utils/time";
@@ -43,9 +43,36 @@ function clipAt(p: ProjectState, kind: "video" | "audio", t: number): Clip[] {
   return found;
 }
 
+// audio fade envelope: 0..1 based on clip fadeIn/fadeOut
+function envelope(c: Clip, t: number): number {
+  let g = 1;
+  if (c.fadeIn && t - c.start < c.fadeIn) g = Math.min(g, (t - c.start) / c.fadeIn);
+  const untilEnd = c.start + c.duration - t;
+  if (c.fadeOut && untilEnd < c.fadeOut) g = Math.min(g, untilEnd / c.fadeOut);
+  return Math.max(0, Math.min(1, g));
+}
+
+function cornerStyle(c: Clip): CSSProperties {
+  const w = `${c.sizePct ?? 18}%`;
+  const base: CSSProperties = { position: "absolute", width: w, opacity: c.opacity ?? 1 };
+  switch (c.corner ?? "tr") {
+    case "tl": return { ...base, top: "4%", left: "4%" };
+    case "tr": return { ...base, top: "4%", right: "4%" };
+    case "bl": return { ...base, bottom: "6%", left: "4%" };
+    case "br": return { ...base, bottom: "6%", right: "4%" };
+    case "lower-third": return { ...base, bottom: "12%", left: "6%", width: "auto", maxWidth: "70%" };
+    case "center":
+    default:
+      return c.sizePct === 100
+        ? { ...base, inset: 0, width: "100%", height: "100%" }
+        : { ...base, top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "auto", maxWidth: "86%" };
+  }
+}
+
 export default function Preview(p: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef(new Map<string, HTMLAudioElement>());
+  const pipRefs = useRef(new Map<string, HTMLVideoElement>());
   const containerRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -63,6 +90,16 @@ export default function Preview(p: Props) {
   const blurFx = activeEffects.find((e) => e.effect === "blur");
   const dissolveFx = activeEffects.find((e) => e.effect === "cross-dissolve");
 
+  // overlays / titles on the graphics track
+  const activeGraphics = p.project.clips
+    .filter(
+      (c) =>
+        (c.kind === "overlay" || c.kind === "title") &&
+        p.playhead >= c.start &&
+        p.playhead < c.start + c.duration
+    )
+    .filter((c) => !p.project.tracks.find((t) => t.id === c.trackId)?.muted);
+
   const subtitle = p.toggles.captions
     ? p.project.subtitles.find((s) => p.playhead >= s.start && p.playhead <= s.end)
     : null;
@@ -78,7 +115,9 @@ export default function Preview(p: Props) {
     if (!v || !activeVideo) return;
     if (Math.abs(v.currentTime - targetTime) > 0.2) v.currentTime = targetTime;
     v.playbackRate = p.playbackRate * activeVideo.speed;
-    v.volume = videoAudible ? volume * activeVideo.volume : 0;
+    v.volume = videoAudible
+      ? Math.min(1, volume * activeVideo.volume * envelope(activeVideo, p.playhead))
+      : 0;
     if (p.playing && v.paused) v.play().catch(() => {});
     if (!p.playing && !v.paused) v.pause();
   });
@@ -90,8 +129,21 @@ export default function Preview(p: Props) {
       if (!clip) { el.pause(); continue; }
       const t = clip.inPoint + (p.playhead - clip.start);
       if (Math.abs(el.currentTime - t) > 0.25) el.currentTime = t;
-      el.volume = volume * clip.volume;
+      el.volume = Math.min(1, volume * clip.volume * envelope(clip, p.playhead));
       el.playbackRate = p.playbackRate;
+      if (p.playing && el.paused) el.play().catch(() => {});
+      if (!p.playing && !el.paused) el.pause();
+    }
+  });
+
+  // picture-in-picture video overlays
+  useEffect(() => {
+    for (const [id, el] of pipRefs.current) {
+      const clip = activeGraphics.find((c) => c.id === id);
+      if (!clip) { el.pause(); continue; }
+      const t = clip.inPoint + (p.playhead - clip.start);
+      if (Math.abs(el.currentTime - t) > 0.3) el.currentTime = t;
+      el.muted = true;
       if (p.playing && el.paused) el.play().catch(() => {});
       if (!p.playing && !el.paused) el.pause();
     }
@@ -134,6 +186,13 @@ export default function Preview(p: Props) {
   const subPos =
     st.position === "top" ? { top: "8%" } : st.position === "middle" ? { top: "45%" } : { bottom: "10%" };
 
+  // per-clip transform (rotate / flip / scale) + dramatic zoom effect
+  const transforms: string[] = [];
+  if (activeVideo?.rotate) transforms.push(`rotate(${activeVideo.rotate}deg)`);
+  if (activeVideo?.flipH) transforms.push("scaleX(-1)");
+  const scl = (activeVideo?.scale ?? 1) * (zoomFx ? 1.18 : 1);
+  if (scl !== 1) transforms.push(`scale(${scl})`);
+
   const toggleBtn = (key: keyof PreviewToggles, label: string) => (
     <button
       className={p.toggles[key] ? "pv-toggle active" : "pv-toggle"}
@@ -158,7 +217,7 @@ export default function Preview(p: Props) {
             className="monitor-inner"
             style={{
               filter: p.project.colorGrade === "none" ? undefined : p.project.colorGrade,
-              transform: zoomFx ? "scale(1.18)" : undefined,
+              transform: transforms.length ? transforms.join(" ") : undefined,
               opacity: dissolveFx ? 0.55 : 1,
               transition: "transform 0.35s ease, opacity 0.3s ease",
             }}
@@ -187,6 +246,40 @@ export default function Preview(p: Props) {
               </div>
             )}
           </div>
+
+          {/* graphics overlays: logos, watermarks, PiP, B-roll, titles */}
+          {activeGraphics.map((c) => {
+            const asset = c.assetId ? p.assets.find((a) => a.id === c.assetId) : null;
+            const style = cornerStyle(c);
+            const anim = c.textAnimation && c.textAnimation !== "none" ? `gfx-anim-${c.textAnimation}` : "";
+            if (c.kind === "title") {
+              return (
+                <div key={c.id} className={`title-overlay ${c.corner === "lower-third" ? "lower-third" : ""} ${anim}`} style={style}>
+                  {c.text}
+                </div>
+              );
+            }
+            if (asset?.type === "image") {
+              return <img key={c.id} src={asset.url} alt="" className={`gfx-overlay ${anim}`} style={style} />;
+            }
+            if (asset?.type === "video") {
+              return (
+                <video
+                  key={c.id}
+                  src={asset.url}
+                  className={`gfx-overlay pip ${anim}`}
+                  style={style}
+                  ref={(el) => {
+                    if (el) pipRefs.current.set(c.id, el);
+                    else pipRefs.current.delete(c.id);
+                  }}
+                  muted
+                  preload="auto"
+                />
+              );
+            }
+            return null;
+          })}
 
           {p.toggles.safeZones && (
             <>

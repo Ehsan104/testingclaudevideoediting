@@ -32,18 +32,32 @@ clip (`Shift+Delete` ripple) · `Ctrl+Z` undo · `Ctrl+Y` redo · arrow keys fra
 `Home` go to start
 
 **AI editing agent** (right panel) — every command operates on the real timeline:
-- `Remove everything between 2:15 and 2:42` — ripple-removes a range across tracks
-- `Remove all dead space` — deletes detected silences and closes gaps
-- `Remove all filler words` — reports counts, asks to confirm, then cuts each one
-- `Add subtitles` / `Make subtitles yellow` / `Create TikTok-style captions` /
-  `Move captions higher` / `Translate subtitles to Spanish` / `Highlight keywords`
-- `Split at 1:30` / `Add a transition between clips 1 and 2`
-- `Add dramatic zooms` / `Blur the phone number`
-- `Make colors more vibrant` / `Add cinematic color grading` / `Black and white`
-- `Create a TikTok version` (9:16 smart reframe), `1:1`, `4:5`, `16:9`
-- `Generate 5 shorts` / `Add chapter markers`
-- `Add upbeat background music` (places, ducks, and fades an imported audio asset)
-- `Mute Audio 1` / `Lock Video 2` / `Export in 1080p` / `Go to 0:45` / `Undo`
+- Cuts: `Remove everything between 2:15 and 2:42` · `Trim first 5 seconds` ·
+  `Trim end by 10 seconds` · `Shorten clip 3 by 4s` · `Extend clip 2` · `Delete clip 4` ·
+  `Swap clips 2 and 3` · `Move clip 2 before clip 1` · `Duplicate this clip` ·
+  `Copy intro to the end` · `Split at 1:30` · `Select clip 3` / `Select everything after 2:30`
+- Cleanup: `Remove all dead space` · `Remove all filler words` (confirm-first) ·
+  `Create a stronger hook`
+- Captions: `Add subtitles` · templates (`TikTok`, `TikTok Viral`, `Hormozi`, `YouTube`,
+  `Podcast`, `Corporate`, `Minimal`, `Gaming`, `Educational`) · `Make subtitles yellow` ·
+  `Move captions higher` · `Make captions bigger` · `Split/merge the caption here` ·
+  `Highlight keywords` · `Translate subtitles to Spanish` — plus drag caption segments
+  on the timeline to retime them and double-click to edit text
+- Audio: `Lower music volume by 30%` · `Boost speaker volume` · `Normalize audio` ·
+  `Fade in music` / `Fade out the ending` / `Crossfade` (audible in preview) ·
+  `Replace the music` · `Remove all music` · `Clean audio` / `Remove background noise`
+  (render-time effect clips)
+- Overlays & text: `Add logo top right` · `Add watermark` · `Picture in picture` ·
+  `Insert screenshot at 2:10 for 5 seconds` · `Add B-roll` ·
+  `Add title "My Video" at the beginning` · `Add a lower third` · `Add a call to action` ·
+  `Animate title`
+- Visuals: `Speed up 2x` · `Slow motion` · `Rotate 90` · `Flip horizontally` ·
+  `Zoom in 10%` · `Add dramatic zooms` · `Blur the phone number` · `Stabilize footage` ·
+  `Make colors more vibrant` / `Cinematic grading` / `Black and white`
+- Content: `Create a TikTok version` (9:16), `Generate 5 shorts`, `Find best moments`,
+  `Add chapter markers`, `Generate 3 thumbnails` (captures real preview frames as PNGs)
+- Project: autosaves to the browser on every edit (restores on reload; re-import media
+  files to relink them) · `Mute Audio 1` · `Export all shorts` · `Export in 1080p` · `Undo`
 
 **Transcript-driven editing**: the Subtitles & Transcript tab shows the timeline
 transcript; click a word to jump there, click × to cut that word from the video.

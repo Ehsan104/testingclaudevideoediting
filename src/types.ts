@@ -54,10 +54,20 @@ export interface Clip {
   duration: number; // seconds
   inPoint: number; // offset into source asset, seconds
   color: string;
-  kind: "media" | "transition" | "effect" | "title";
+  kind: "media" | "transition" | "effect" | "title" | "overlay";
   effect?: string; // e.g. "cross-dissolve", "zoom", "blur"
   speed: number;
   volume: number; // 0..1
+  fadeIn?: number; // seconds of audio fade-in
+  fadeOut?: number; // seconds of audio fade-out
+  rotate?: number; // degrees, applied while clip is active
+  flipH?: boolean;
+  scale?: number; // 1 = normal
+  corner?: "tl" | "tr" | "bl" | "br" | "center" | "lower-third"; // overlay/title position
+  sizePct?: number; // overlay width, % of frame
+  opacity?: number; // overlay opacity (watermarks)
+  text?: string; // title clip content
+  textAnimation?: "none" | "slide" | "fade" | "pop";
 }
 
 export interface SubtitleStyle {

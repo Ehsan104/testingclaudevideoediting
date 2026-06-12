@@ -48,6 +48,33 @@ export default function App() {
   const duration = projectDuration(project);
   const projectRef = useRef(project);
   projectRef.current = project;
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+
+  // ---- autosave every edit to this browser; restore on load ----
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (!restoredRef.current) {
+      restoredRef.current = true;
+      try {
+        const saved = localStorage.getItem("ltl.autosave");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.tracks?.length && (parsed.clips?.length || parsed.subtitles?.length)) {
+            commit(parsed);
+            return; // skip saving the empty project over the restore
+          }
+        }
+      } catch {
+        // corrupt autosave: ignore
+      }
+    }
+    try {
+      localStorage.setItem("ltl.autosave", JSON.stringify(project));
+    } catch {
+      // storage full/unavailable: autosave is best-effort
+    }
+  }, [project, commit]);
 
   // ---- media import (Step 2 + 3: upload then automatic AI analysis) ----
   const patchAsset = useCallback((id: string, patch: (a: MediaAsset) => MediaAsset) => {
@@ -93,6 +120,30 @@ export default function App() {
     [patchAsset]
   );
 
+  // After an autosave restore, clips reference asset ids from the previous
+  // session (blob URLs don't survive reloads). Re-importing a file with the
+  // same name relinks those clips to the fresh asset.
+  const relinkClips = useCallback(
+    (asset: MediaAsset) => {
+      const known = new Set(assetsRef.current.map((a) => a.id));
+      known.add(asset.id);
+      const proj = projectRef.current;
+      const needsRelink = proj.clips.some(
+        (c) => c.assetId && !known.has(c.assetId) && c.name.includes(asset.name)
+      );
+      if (!needsRelink) return;
+      commit({
+        ...proj,
+        clips: proj.clips.map((c) =>
+          c.assetId && !known.has(c.assetId) && c.name.includes(asset.name)
+            ? { ...c, assetId: asset.id }
+            : c
+        ),
+      });
+    },
+    [commit]
+  );
+
   const importFiles = useCallback(
     (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
@@ -107,6 +158,7 @@ export default function App() {
             id: uid("asset"), name: file.name, type, url, duration: 5,
           };
           setAssets((a) => [...a, asset]);
+          relinkClips(asset);
           continue;
         }
         const probe = document.createElement(type === "audio" ? "audio" : "video") as HTMLVideoElement;
@@ -126,6 +178,7 @@ export default function App() {
             transcription: { state: "decoding" },
           };
           setAssets((a) => [...a, asset]);
+          relinkClips(asset);
           runRealAnalysis(asset.id, url);
         };
         probe.onerror = () => {
@@ -138,8 +191,44 @@ export default function App() {
         };
       }
     },
-    [runRealAnalysis]
+    [runRealAnalysis, relinkClips]
   );
+
+  // Real thumbnail generation: grab the current preview frame onto a canvas,
+  // overlay the project title, download as PNG(s).
+  const generateThumbnails = useCallback((count: number) => {
+    const video = document.querySelector<HTMLVideoElement>(".monitor-video");
+    if (!video || !(video instanceof HTMLVideoElement) || video.readyState < 2) return;
+    const banners = ["#7c5cff", "#ff453a", "#ffd60a", "#00c2a8", "#ff6482"];
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      const g = canvas.getContext("2d")!;
+      g.fillStyle = "#000";
+      g.fillRect(0, 0, 1280, 720);
+      const ar = video.videoWidth / video.videoHeight || 16 / 9;
+      const w = ar > 16 / 9 ? 1280 : 720 * ar;
+      const h = ar > 16 / 9 ? 1280 / ar : 720;
+      g.drawImage(video, (1280 - w) / 2, (720 - h) / 2, w, h);
+      g.fillStyle = banners[i % banners.length];
+      g.globalAlpha = 0.9;
+      g.fillRect(0, 560, 1280, 110);
+      g.globalAlpha = 1;
+      g.fillStyle = "#fff";
+      g.font = "bold 64px Inter, sans-serif";
+      g.textBaseline = "middle";
+      g.fillText(projectRef.current.name.toUpperCase(), 48, 615, 1184);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `thumbnail_${i + 1}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }, "image/png");
+    }
+  }, []);
 
   const addToTimeline = useCallback(
     (asset: MediaAsset) => commit(opAddClip(projectRef.current, asset)),
@@ -256,6 +345,8 @@ export default function App() {
             onRedo={redo}
             onSeek={seek}
             onOpenExport={(preset) => setExportOpen({ preset })}
+            onSelect={setSelected}
+            onThumbnail={generateThumbnails}
           />
         )}
       </div>

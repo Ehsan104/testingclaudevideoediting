@@ -31,6 +31,12 @@ export default function Timeline(p: Props) {
   const [snap, setSnap] = useState(true);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [draft, setDraft] = useState<Partial<Clip> | null>(null);
+  const [subDrag, setSubDrag] = useState<{ id: string; originX: number; origStart: number; origEnd: number } | null>(null);
+  const [subDraft, setSubDraft] = useState<{ start: number; end: number } | null>(null);
+  const subDragRef = useRef<typeof subDrag>(null);
+  const subDraftRef = useRef<typeof subDraft>(null);
+  subDragRef.current = subDrag;
+  subDraftRef.current = subDraft;
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ drag: DragState | null; draft: Partial<Clip> | null }>({ drag: null, draft: null });
   dragRef.current = { drag, draft };
@@ -113,6 +119,37 @@ export default function Timeline(p: Props) {
       origIn: clip.inPoint,
     });
   };
+
+  // ---- subtitle segment dragging ----
+  useEffect(() => {
+    if (!subDrag) return;
+    const onMove = (e: PointerEvent) => {
+      const d = subDragRef.current!;
+      const dx = (e.clientX - d.originX) / pps;
+      const start = Math.max(0, maybeSnap(d.origStart + dx));
+      setSubDraft({ start, end: start + (d.origEnd - d.origStart) });
+    };
+    const onUp = () => {
+      const d = subDragRef.current;
+      const df = subDraftRef.current;
+      if (d && df) {
+        p.onCommit({
+          ...p.project,
+          subtitles: p.project.subtitles.map((s) =>
+            s.id === d.id ? { ...s, start: df.start, end: df.end } : s
+          ),
+        });
+      }
+      setSubDrag(null);
+      setSubDraft(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [subDrag, pps, maybeSnap, p]);
 
   // ---- ruler scrubbing ----
   const scrubFromEvent = (e: React.PointerEvent) => {
@@ -264,17 +301,34 @@ export default function Timeline(p: Props) {
                 }}
               >
                 {track.kind === "subtitle"
-                  ? p.project.subtitles.map((s) => (
-                      <div
-                        key={s.id}
-                        className="clip subtitle-clip"
-                        style={{ left: s.start * pps, width: Math.max(6, (s.end - s.start) * pps) }}
-                        title={s.text}
-                        onPointerDown={(e) => { e.stopPropagation(); p.onSeek(s.start); }}
-                      >
-                        <span className="clip-label">{s.text}</span>
-                      </div>
-                    ))
+                  ? p.project.subtitles.map((s) => {
+                      const live = subDrag?.id === s.id && subDraft ? subDraft : s;
+                      return (
+                        <div
+                          key={s.id}
+                          className="clip subtitle-clip"
+                          style={{ left: live.start * pps, width: Math.max(6, (live.end - live.start) * pps) }}
+                          title={`${s.text} — drag to retime, double-click to edit`}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            if (track.locked) return;
+                            p.onSeek(s.start);
+                            setSubDrag({ id: s.id, originX: e.clientX, origStart: s.start, origEnd: s.end });
+                          }}
+                          onDoubleClick={() => {
+                            const text = window.prompt("Edit caption", s.text);
+                            if (text !== null && text.trim()) {
+                              p.onCommit({
+                                ...p.project,
+                                subtitles: p.project.subtitles.map((x) => (x.id === s.id ? { ...x, text: text.trim() } : x)),
+                              });
+                            }
+                          }}
+                        >
+                          <span className="clip-label">{s.text}</span>
+                        </div>
+                      );
+                    })
                   : clipsOnTrack(p.project, track.id).map(renderClip)}
               </div>
             </div>
