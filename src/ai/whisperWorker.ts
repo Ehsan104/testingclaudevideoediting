@@ -4,23 +4,43 @@
 import { pipeline } from "@huggingface/transformers";
 
 let asr: any = null;
+let loadedQuality: string | null = null;
 
-// Word-level timestamps require a model exported with cross-attention
-// outputs (the "_timestamped" exports). Keep the plain export as a backup —
-// with it we fall back to segment timestamps below.
-const MODEL_CANDIDATES = [
-  "onnx-community/whisper-tiny.en_timestamped",
-  "onnx-community/whisper-tiny.en",
-];
+// Per-quality model ladders, best first. "_timestamped" exports include the
+// cross-attention outputs needed for word-level timestamps; models that
+// don't exist or fail to load are skipped automatically, so each ladder
+// ends in the tiny export that is known to load everywhere.
+const MODEL_LADDERS: Record<string, string[]> = {
+  fast: [
+    "onnx-community/whisper-tiny.en_timestamped",
+    "onnx-community/whisper-tiny.en",
+  ],
+  balanced: [
+    "onnx-community/whisper-base.en_timestamped",
+    "onnx-community/whisper-base_timestamped",
+    "onnx-community/whisper-base.en",
+    "onnx-community/whisper-tiny.en_timestamped",
+    "onnx-community/whisper-tiny.en",
+  ],
+  accurate: [
+    "onnx-community/whisper-small.en_timestamped",
+    "onnx-community/whisper-small_timestamped",
+    "onnx-community/whisper-small.en",
+    "onnx-community/whisper-base.en_timestamped",
+    "onnx-community/whisper-base_timestamped",
+    "onnx-community/whisper-tiny.en_timestamped",
+  ],
+};
 
 // Some quantized variants fail to create an ONNX session depending on the
 // onnxruntime-web build (e.g. q8 → missing DequantizeLinear scales). Try the
 // smallest first and fall back to full precision, which always loads.
 const DTYPE_CANDIDATES = ["q4", "fp32"] as const;
 
-async function loadModel(id: string): Promise<any> {
+async function loadModel(id: string, quality: string): Promise<any> {
+  const ladder = MODEL_LADDERS[quality] ?? MODEL_LADDERS.balanced;
   let lastErr: unknown = null;
-  for (const model of MODEL_CANDIDATES) {
+  for (const model of ladder) {
     for (const dtype of DTYPE_CANDIDATES) {
       try {
         return await pipeline("automatic-speech-recognition", model, {
@@ -62,11 +82,16 @@ function toWordChunks(chunks: any[]): any[] {
 }
 
 self.onmessage = async (e: MessageEvent) => {
-  const { id, audio } = e.data as { id: string; audio: Float32Array };
+  const { id, audio, quality = "balanced" } = e.data as {
+    id: string;
+    audio: Float32Array;
+    quality?: string;
+  };
   try {
-    if (!asr) {
+    if (!asr || loadedQuality !== quality) {
       self.postMessage({ type: "status", id, status: "loading-model" });
-      asr = await loadModel(id);
+      asr = await loadModel(id, quality);
+      loadedQuality = quality;
     }
     self.postMessage({ type: "status", id, status: "transcribing" });
     const opts = { chunk_length_s: 30, stride_length_s: 5 };

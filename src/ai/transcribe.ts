@@ -62,9 +62,12 @@ function getWorker(): Worker {
 
 let seq = 0;
 
+export type TranscribeQuality = "fast" | "balanced" | "accurate";
+
 export function transcribe(
   audio: Float32Array,
-  onUpdate: (u: TranscribeUpdate) => void
+  onUpdate: (u: TranscribeUpdate) => void,
+  quality: TranscribeQuality = "balanced"
 ): Promise<TranscriptWord[]> {
   const id = `job_${++seq}`;
   const w = getWorker();
@@ -100,6 +103,6 @@ export function transcribe(
     w.addEventListener("message", onMessage);
     // copy so the buffer can be transferred without detaching caller state
     const copy = new Float32Array(audio);
-    w.postMessage({ id, audio: copy }, [copy.buffer]);
+    w.postMessage({ id, audio: copy, quality }, [copy.buffer]);
   });
 }

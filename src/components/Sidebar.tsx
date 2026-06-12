@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { MediaAsset, ProjectState } from "../types";
 import { opRemoveRange } from "../store";
 import { timelineTranscript } from "../ai/agent";
+import { TranscribeQuality } from "../ai/transcribe";
 import { formatTimeShort } from "../utils/time";
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   onSeek: (t: number) => void;
   onCommit: (p: ProjectState) => void;
   onRetranscribe: (asset: MediaAsset) => void;
+  transcribeQuality: TranscribeQuality;
+  onTranscribeQualityChange: (q: TranscribeQuality) => void;
 }
 
 const TABS = [
@@ -79,6 +82,18 @@ export default function Sidebar(p: Props) {
               <span>Drop files or click to browse</span>
               <span className="hint">MP4 · MOV · AVI · MKV · WEBM · MP3 · WAV · AAC · PNG · JPG · SVG · WEBP</span>
             </div>
+            <label className="quality-row">
+              Transcription quality
+              <select
+                value={p.transcribeQuality}
+                onChange={(e) => p.onTranscribeQualityChange(e.target.value as TranscribeQuality)}
+                title="Larger models are more accurate but slower and a bigger one-time download. Change it, then click Retry on a clip to re-transcribe."
+              >
+                <option value="fast">Fast (tiny model)</option>
+                <option value="balanced">Balanced (base model)</option>
+                <option value="accurate">Accurate (small model)</option>
+              </select>
+            </label>
             <div className="asset-list">
               {p.assets.length === 0 && <p className="empty">No media yet. Import files to get started — AI analysis (transcript, scenes, speakers, highlights) runs automatically.</p>}
               {p.assets.map((a) => (

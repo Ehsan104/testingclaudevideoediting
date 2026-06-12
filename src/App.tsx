@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MediaAsset, uid } from "./types";
 import { opAddClip, opDeleteClips, opSplitAt, projectDuration, useProject } from "./store";
 import { analyzeAsset } from "./ai/analysis";
-import { decodeAudio, detectSilences, transcribe } from "./ai/transcribe";
+import { decodeAudio, detectSilences, transcribe, TranscribeQuality } from "./ai/transcribe";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import Preview from "./components/Preview";
@@ -39,6 +39,11 @@ export default function App() {
     transcript: false,
   });
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [transcribeQuality, setTranscribeQuality] = useState<TranscribeQuality>(
+    () => (localStorage.getItem("ltl.transcribeQuality") as TranscribeQuality) || "balanced"
+  );
+  const qualityRef = useRef(transcribeQuality);
+  qualityRef.current = transcribeQuality;
 
   const duration = projectDuration(project);
   const projectRef = useRef(project);
@@ -62,11 +67,14 @@ export default function App() {
           ...a,
           analysis: a.analysis ? { ...a.analysis, silences } : a.analysis,
         }));
-        const words = await transcribe(pcm, (u) =>
-          patchAsset(assetId, (a) => ({
-            ...a,
-            transcription: { state: u.status, progress: u.progress },
-          }))
+        const words = await transcribe(
+          pcm,
+          (u) =>
+            patchAsset(assetId, (a) => ({
+              ...a,
+              transcription: { state: u.status, progress: u.progress },
+            })),
+          qualityRef.current
         );
         patchAsset(assetId, (a) => ({
           ...a,
@@ -216,6 +224,11 @@ export default function App() {
           onSeek={seek}
           onCommit={commit}
           onRetranscribe={(a) => runRealAnalysis(a.id, a.url)}
+          transcribeQuality={transcribeQuality}
+          onTranscribeQualityChange={(q) => {
+            setTranscribeQuality(q);
+            localStorage.setItem("ltl.transcribeQuality", q);
+          }}
         />
         <div className="center-col">
           <Preview
