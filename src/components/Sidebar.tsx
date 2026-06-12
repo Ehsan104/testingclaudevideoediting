@@ -11,6 +11,7 @@ interface Props {
   onAddToTimeline: (asset: MediaAsset) => void;
   onSeek: (t: number) => void;
   onCommit: (p: ProjectState) => void;
+  onRetranscribe: (asset: MediaAsset) => void;
 }
 
 const TABS = [
@@ -102,7 +103,12 @@ export default function Sidebar(p: Props) {
                           `⬇ Downloading speech model${a.transcription.progress ? ` ${a.transcription.progress}%` : "…"} (first time only)`}
                         {a.transcription.state === "transcribing" && "✍ Transcribing speech…"}
                         {a.transcription.state === "real" && "✓ Real transcript (Whisper)"}
-                        {a.transcription.state === "simulated" && "⚠ Using simulated transcript"}
+                        {a.transcription.state === "simulated" && (
+                          <>
+                            ⚠ Using simulated transcript{" "}
+                            <button className="mini-btn" onClick={() => p.onRetranscribe(a)}>Retry</button>
+                          </>
+                        )}
                       </span>
                     )}
                     <button className="mini-btn" onClick={() => p.onAddToTimeline(a)}>+ Add to timeline</button>

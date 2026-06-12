@@ -215,6 +215,7 @@ export default function App() {
           onAddToTimeline={addToTimeline}
           onSeek={seek}
           onCommit={commit}
+          onRetranscribe={(a) => runRealAnalysis(a.id, a.url)}
         />
         <div className="center-col">
           <Preview
