@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MediaAsset, uid } from "./types";
 import { opAddClip, opDeleteClips, opSplitAt, projectDuration, useProject } from "./store";
 import { analyzeAsset } from "./ai/analysis";
+import { decodeAudio, detectSilences, transcribe } from "./ai/transcribe";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import Preview from "./components/Preview";
@@ -44,6 +45,46 @@ export default function App() {
   projectRef.current = project;
 
   // ---- media import (Step 2 + 3: upload then automatic AI analysis) ----
+  const patchAsset = useCallback((id: string, patch: (a: MediaAsset) => MediaAsset) => {
+    setAssets((list) => list.map((a) => (a.id === id ? patch(a) : a)));
+  }, []);
+
+  // Real analysis: decode audio in-browser, detect true silences, then run
+  // Whisper (transformers.js, in a worker) for an exact word-level transcript.
+  // The simulated analysis stays as a fallback for undecodable files.
+  const runRealAnalysis = useCallback(
+    async (assetId: string, url: string) => {
+      try {
+        patchAsset(assetId, (a) => ({ ...a, transcription: { state: "decoding" } }));
+        const pcm = await decodeAudio(url);
+        const silences = detectSilences(pcm);
+        patchAsset(assetId, (a) => ({
+          ...a,
+          analysis: a.analysis ? { ...a.analysis, silences } : a.analysis,
+        }));
+        const words = await transcribe(pcm, (u) =>
+          patchAsset(assetId, (a) => ({
+            ...a,
+            transcription: { state: u.status, progress: u.progress },
+          }))
+        );
+        patchAsset(assetId, (a) => ({
+          ...a,
+          transcription: { state: "real" },
+          analysis: a.analysis
+            ? { ...a.analysis, transcript: words, silences }
+            : { transcript: words, silences, scenes: [], speakers: ["Speaker 1"], highlights: [] },
+        }));
+      } catch (err: any) {
+        patchAsset(assetId, (a) => ({
+          ...a,
+          transcription: { state: "simulated", error: String(err?.message ?? err) },
+        }));
+      }
+    },
+    [patchAsset]
+  );
+
   const importFiles = useCallback(
     (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
@@ -74,19 +115,22 @@ export default function App() {
             width: probe.videoWidth || undefined,
             height: probe.videoHeight || undefined,
             analysis: analyzeAsset(file.name, d),
+            transcription: { state: "decoding" },
           };
           setAssets((a) => [...a, asset]);
+          runRealAnalysis(asset.id, url);
         };
         probe.onerror = () => {
           const asset: MediaAsset = {
             id: uid("asset"), name: file.name, type, url, duration: 60,
             analysis: analyzeAsset(file.name, 60),
+            transcription: { state: "simulated", error: "Browser could not decode this file" },
           };
           setAssets((a) => [...a, asset]);
         };
       }
     },
-    []
+    [runRealAnalysis]
   );
 
   const addToTimeline = useCallback(

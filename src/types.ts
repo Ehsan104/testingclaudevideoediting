@@ -9,6 +9,13 @@ export interface MediaAsset {
   width?: number;
   height?: number;
   analysis?: MediaAnalysis;
+  transcription?: TranscriptionState;
+}
+
+export interface TranscriptionState {
+  state: "decoding" | "loading-model" | "transcribing" | "real" | "simulated";
+  progress?: number; // model download %, when known
+  error?: string;
 }
 
 export interface TranscriptWord {

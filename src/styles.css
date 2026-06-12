@@ -93,6 +93,9 @@ input, select {
 .asset-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .asset-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .asset-sub { color: var(--dim); font-size: 11px; }
+.transcribe-real { color: #32d74b; }
+.transcribe-simulated { color: #ffd60a; }
+.transcribe-decoding, .transcribe-loading-model, .transcribe-transcribing { color: var(--accent2); }
 .mini-btn { align-self: flex-start; font-size: 11px; padding: 3px 8px; background: var(--bg3); }
 .mini-btn.ghost { background: transparent; }
 .search { width: 100%; margin-bottom: 10px; }

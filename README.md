@@ -55,11 +55,21 @@ render manifest describing the full program (a cloud render service would consum
 
 ## How the "AI" works in this prototype
 
-There is no network call. Media analysis (`src/ai/analysis.ts`) deterministically
-simulates a transcription/scene-detection pipeline per asset, and the chat agent
-(`src/ai/agent.ts`) is a natural-language command interpreter that compiles requests
-into pure timeline operations (`src/store.ts`). Swapping in real services (Whisper,
-scene detection, an LLM planner) only requires replacing those two modules — the
+**Transcription is real.** When you import a video or audio file, the app decodes the
+audio in-browser, detects true silences via RMS energy analysis
+(`src/ai/transcribe.ts`), and runs OpenAI Whisper locally through
+[transformers.js](https://github.com/huggingface/transformers.js) in a Web Worker
+(`src/ai/whisperWorker.ts`) to produce a word-level transcript of exactly what is
+said. The first import downloads the speech model (~40 MB, cached by the browser);
+everything after that runs fully on-device with no audio leaving your machine.
+Subtitles, the transcript editor, filler-word removal, and dead-space removal all
+operate on this real data. If a file can't be decoded (some AVI/MKV codecs), the app
+falls back to a simulated transcript and labels the asset accordingly.
+
+Scene detection and highlight picking are still simulated (`src/ai/analysis.ts`), and
+the chat agent (`src/ai/agent.ts`) is a natural-language command interpreter that
+compiles requests into pure timeline operations (`src/store.ts`). Swapping in a real
+scene detector or an LLM planner only requires replacing those modules — the
 operation layer and UI stay the same.
 
 ## Architecture

@@ -93,8 +93,18 @@ export default function Sidebar(p: Props) {
                     <span className="asset-name" title={a.name}>{a.name}</span>
                     <span className="asset-sub">
                       {a.type} · {formatTimeShort(a.duration)}
-                      {a.analysis && ` · ${a.analysis.transcript.length} words · ${a.analysis.scenes.length} scenes · ${a.analysis.speakers.length} speaker${a.analysis.speakers.length > 1 ? "s" : ""}`}
+                      {a.analysis && ` · ${a.analysis.transcript.length} words · ${a.analysis.silences.length} silences`}
                     </span>
+                    {a.transcription && (
+                      <span className={`asset-sub transcribe-${a.transcription.state}`} title={a.transcription.error}>
+                        {a.transcription.state === "decoding" && "🎧 Analyzing audio…"}
+                        {a.transcription.state === "loading-model" &&
+                          `⬇ Downloading speech model${a.transcription.progress ? ` ${a.transcription.progress}%` : "…"} (first time only)`}
+                        {a.transcription.state === "transcribing" && "✍ Transcribing speech…"}
+                        {a.transcription.state === "real" && "✓ Real transcript (Whisper)"}
+                        {a.transcription.state === "simulated" && "⚠ Using simulated transcript"}
+                      </span>
+                    )}
                     <button className="mini-btn" onClick={() => p.onAddToTimeline(a)}>+ Add to timeline</button>
                   </div>
                 </div>
